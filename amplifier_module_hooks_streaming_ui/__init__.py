@@ -312,7 +312,20 @@ class StreamingUIHooks:
                     # First request - cache being created
                     cache_info = " (caching...)"
 
-            print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
+            # Build the header with model info if available
+            if self.last_llm_info:
+                provider = self.last_llm_info.get("provider", "")
+                model = self.last_llm_info.get("model", "")
+                duration_ms = self.last_llm_info.get("duration_ms")
+
+                # Format duration as seconds with 1 decimal
+                duration_str = f" [{duration_ms / 1000:.1f}s]" if duration_ms else ""
+
+                header = f"📊 Token Usage ({provider}/{model}){duration_str}"
+            else:
+                header = "📊 Token Usage"
+
+            print(f"{indent}\033[2m│  {header}\033[0m")
             print(
                 f"{indent}\033[2m└─ Input: {input_str}{cache_info} | Output: {output_str} | Total: {total_str}\033[0m"
             )

@@ -466,3 +466,95 @@ async def test_tool_with_string_result(capsys):
     captured = capsys.readouterr()
     assert "✅ Tool result: some_tool" in captured.out
     assert "Simple string result" in captured.out
+
+
+class TestTokenUsageHeaderWithModelInfo:
+    """Test token usage header displays model info when available."""
+
+    @pytest.mark.asyncio
+    async def test_token_usage_header_includes_model_info(self, capsys):
+        """Test token usage header shows provider/model and duration when last_llm_info is set."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Simulate llm:response event setting last_llm_info
+        hooks.last_llm_info = {
+            "provider": "anthropic",
+            "model": "claude-3-sonnet",
+            "duration_ms": 1500,
+        }
+
+        # Last block with usage data
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": ""},
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        captured = capsys.readouterr()
+        # Should include provider/model and duration in header
+        assert "📊 Token Usage (anthropic/claude-3-sonnet) [1.5s]" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_token_usage_header_without_duration(self, capsys):
+        """Test token usage header shows provider/model without duration when duration_ms is None."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # No duration_ms
+        hooks.last_llm_info = {
+            "provider": "openai",
+            "model": "gpt-4",
+            "duration_ms": None,
+        }
+
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": ""},
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        captured = capsys.readouterr()
+        # Should include provider/model but no duration
+        assert "📊 Token Usage (openai/gpt-4)" in captured.out
+        # Should NOT have duration like [1.5s] - check for pattern [digits.digits s]
+        import re
+
+        header_line = captured.out.split("Token Usage")[1].split("\n")[0]
+        assert not re.search(r"\[\d+\.\d+s\]", header_line)  # No duration bracket
+
+    @pytest.mark.asyncio
+    async def test_token_usage_header_without_llm_info(self, capsys):
+        """Test token usage header shows basic format when last_llm_info is None."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # No llm info captured
+        hooks.last_llm_info = None
+
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": ""},
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        captured = capsys.readouterr()
+        # Should show basic header without model info
+        assert "📊 Token Usage" in captured.out
+        # Should NOT have parentheses (no model info)
+        header_line = [
+            line for line in captured.out.split("\n") if "Token Usage" in line
+        ][0]
+        assert "(" not in header_line
