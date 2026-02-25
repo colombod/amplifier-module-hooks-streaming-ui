@@ -118,6 +118,7 @@ async def test_mount_registers_hooks():
         "content_block:end",
         "tool:pre",
         "tool:post",
+        "llm:response",
     ]
 
     for event in expected_events:
@@ -140,8 +141,8 @@ async def test_mount_with_defaults():
 
     await mount(coordinator, config)
 
-    # Should register 4 hooks: content_block:start, content_block:end, tool:pre, tool:post
-    assert coordinator.hooks.register.call_count == 4
+    # Should register 5 hooks: content_block:start, content_block:end, tool:pre, tool:post, llm:response
+    assert coordinator.hooks.register.call_count == 5
 
 
 class TestStreamingUIHooks:

@@ -38,6 +38,7 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
     coordinator.hooks.register("content_block:end", hooks.handle_content_block_end)
     coordinator.hooks.register("tool:pre", hooks.handle_tool_pre)
     coordinator.hooks.register("tool:post", hooks.handle_tool_post)
+    coordinator.hooks.register("llm:response", hooks.handle_llm_response)
 
     # Log successful mount
     logger.info("Mounted hooks-streaming-ui")
