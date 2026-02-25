@@ -433,6 +433,31 @@ class TestStreamingUIHooks:
         result = hooks._truncate_lines(text, 3)
         assert result == text
 
+    @pytest.mark.asyncio
+    async def test_llm_response_captures_model_info(self):
+        """Test that handle_llm_response captures provider/model/duration."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Verify initial state
+        assert hooks.last_llm_info is None
+
+        data = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5-20250514",
+            "duration_ms": 2345,
+        }
+
+        result = await hooks.handle_llm_response("llm:response", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+        assert hooks.last_llm_info is not None
+        assert hooks.last_llm_info["provider"] == "anthropic"
+        assert hooks.last_llm_info["model"] == "claude-sonnet-4-5-20250514"
+        assert hooks.last_llm_info["duration_ms"] == 2345
+
 
 @pytest.mark.asyncio
 async def test_non_thinking_blocks_ignored():
