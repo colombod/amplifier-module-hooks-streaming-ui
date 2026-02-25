@@ -1,11 +1,99 @@
 """Tests for streaming UI hooks module."""
 
+import re
 from unittest.mock import MagicMock
 
 import pytest
 from amplifier_core import HookResult
 from amplifier_module_hooks_streaming_ui import StreamingUIHooks
 from amplifier_module_hooks_streaming_ui import mount
+
+
+class TestStreamingUIHooksInit:
+    """Test StreamingUIHooks initialization."""
+
+    def test_last_llm_info_initialized_to_none(self):
+        """Test that last_llm_info is initialized to None in __init__."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+        assert hasattr(hooks, "last_llm_info"), "last_llm_info attribute should exist"
+        assert hooks.last_llm_info is None, (
+            "last_llm_info should be initialized to None"
+        )
+
+
+class TestHandleLLMResponse:
+    """Test handle_llm_response handler method."""
+
+    @pytest.mark.asyncio
+    async def test_handle_llm_response_exists(self):
+        """Test that handle_llm_response method exists on StreamingUIHooks."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+        assert hasattr(hooks, "handle_llm_response"), (
+            "handle_llm_response method should exist"
+        )
+
+    @pytest.mark.asyncio
+    async def test_handle_llm_response_captures_llm_info(self):
+        """Test that handle_llm_response captures provider, model, and duration_ms."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        data = {
+            "provider": "anthropic",
+            "model": "claude-3-sonnet",
+            "duration_ms": 1234,
+        }
+
+        await hooks.handle_llm_response("llm:response", data)
+
+        # Verify last_llm_info is populated correctly
+        assert hooks.last_llm_info is not None, "last_llm_info should be set"
+        assert hooks.last_llm_info["provider"] == "anthropic"
+        assert hooks.last_llm_info["model"] == "claude-3-sonnet"
+        assert hooks.last_llm_info["duration_ms"] == 1234
+
+    @pytest.mark.asyncio
+    async def test_handle_llm_response_returns_hook_result_continue(self):
+        """Test that handle_llm_response returns HookResult with action='continue'."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        data = {
+            "provider": "openai",
+            "model": "gpt-4",
+            "duration_ms": 500,
+        }
+
+        result = await hooks.handle_llm_response("llm:response", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+    @pytest.mark.asyncio
+    async def test_handle_llm_response_handles_missing_fields(self):
+        """Test that handle_llm_response handles missing fields gracefully."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Empty data dict
+        data = {}
+
+        result = await hooks.handle_llm_response("llm:response", data)
+
+        # Should still work with None values
+        assert hooks.last_llm_info is not None
+        assert hooks.last_llm_info["provider"] is None
+        assert hooks.last_llm_info["model"] is None
+        assert hooks.last_llm_info["duration_ms"] is None
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
 
 
 @pytest.mark.asyncio
@@ -15,16 +103,30 @@ async def test_mount_registers_hooks():
     coordinator.hooks = MagicMock()
     coordinator.hooks.register = MagicMock()
 
-    config = {"ui": {"show_thinking_stream": True, "show_tool_lines": 5, "show_token_usage": True}}
+    config = {
+        "ui": {
+            "show_thinking_stream": True,
+            "show_tool_lines": 5,
+            "show_token_usage": True,
+        }
+    }
 
     await mount(coordinator, config)
 
     # Verify all hooks are registered
-    expected_events = ["content_block:start", "content_block:end", "tool:pre", "tool:post"]
+    expected_events = [
+        "content_block:start",
+        "content_block:end",
+        "tool:pre",
+        "tool:post",
+        "llm:response",
+    ]
 
     for event in expected_events:
         # Find if this event was registered
-        registered = any(call[0][0] == event for call in coordinator.hooks.register.call_args_list)
+        registered = any(
+            call[0][0] == event for call in coordinator.hooks.register.call_args_list
+        )
         assert registered, f"Event {event} was not registered"
 
 
@@ -40,8 +142,8 @@ async def test_mount_with_defaults():
 
     await mount(coordinator, config)
 
-    # Should register 4 hooks: content_block:start, content_block:end, tool:pre, tool:post
-    assert coordinator.hooks.register.call_count == 4
+    # Should register 5 hooks: content_block:start, content_block:end, tool:pre, tool:post, llm:response
+    assert coordinator.hooks.register.call_count == 5
 
 
 class TestStreamingUIHooks:
@@ -50,7 +152,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_thinking_block_start(self, capsys):
         """Test thinking block start detection."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         data = {"block_type": "thinking", "block_index": 0}
 
@@ -66,7 +170,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_thinking_block_disabled(self, capsys):
         """Test thinking blocks are not shown when disabled."""
-        hooks = StreamingUIHooks(show_thinking=False, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=False, show_tool_lines=5, show_token_usage=True
+        )
 
         data = {"block_type": "thinking", "block_index": 0}
 
@@ -82,12 +188,20 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_thinking_block_end(self, capsys):
         """Test thinking block display on end."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         # Track the block first
         hooks.thinking_blocks[0] = {"started": True}
 
-        data = {"block_index": 0, "block": {"type": "thinking", "thinking": "This is a test thought process."}}
+        data = {
+            "block_index": 0,
+            "block": {
+                "type": "thinking",
+                "thinking": "This is a test thought process.",
+            },
+        }
 
         result = await hooks.handle_content_block_end("content_block:end", data)
 
@@ -103,7 +217,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_reasoning_block_end(self, capsys):
         """Reasoning blocks should be treated like thinking blocks."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         hooks.thinking_blocks[1] = {"started": True}
         data = {
@@ -129,7 +245,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_tool_pre(self, capsys):
         """Test tool invocation display."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=3, show_token_usage=True
+        )
 
         data = {
             "tool_name": "filesystem_read",
@@ -148,9 +266,14 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_tool_post_success(self, capsys):
         """Test successful tool result display."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=3, show_token_usage=True
+        )
 
-        data = {"tool_name": "filesystem_read", "tool_response": {"success": True, "output": "File contents here"}}
+        data = {
+            "tool_name": "filesystem_read",
+            "tool_response": {"success": True, "output": "File contents here"},
+        }
 
         result = await hooks.handle_tool_post("tool:post", data)
 
@@ -164,9 +287,14 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_tool_post_failure(self, capsys):
         """Test failed tool result display."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=3, show_token_usage=True
+        )
 
-        data = {"tool_name": "filesystem_read", "tool_response": {"success": False, "output": "Error: File not found"}}
+        data = {
+            "tool_name": "filesystem_read",
+            "tool_response": {"success": False, "output": "Error: File not found"},
+        }
 
         result = await hooks.handle_tool_post("tool:post", data)
 
@@ -180,7 +308,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_token_usage_display_with_thinking(self, capsys):
         """Test token usage displayed after last block when included in event data."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         # Track the thinking block first
         hooks.thinking_blocks[0] = {"started": True}
@@ -208,7 +338,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_token_usage_not_displayed_for_non_last_block(self, capsys):
         """Test token usage NOT displayed for blocks that aren't last."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         hooks.thinking_blocks[0] = {"started": True}
 
@@ -231,7 +363,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_token_usage_disabled(self, capsys):
         """Test token usage is not shown when disabled."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=False)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=False
+        )
 
         hooks.thinking_blocks[0] = {"started": True}
 
@@ -253,7 +387,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_token_usage_missing_from_event(self, capsys):
         """Test token usage handles missing usage data gracefully."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         hooks.thinking_blocks[0] = {"started": True}
 
@@ -274,7 +410,9 @@ class TestStreamingUIHooks:
 
     def test_truncate_lines(self):
         """Test line truncation logic."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=3, show_token_usage=True
+        )
 
         # Test short text (no truncation)
         text = "line1\nline2\nline3"
@@ -295,11 +433,130 @@ class TestStreamingUIHooks:
         result = hooks._truncate_lines(text, 3)
         assert result == text
 
+    @pytest.mark.asyncio
+    async def test_llm_response_captures_model_info(self):
+        """Test that handle_llm_response captures provider/model/duration."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Verify initial state
+        assert hooks.last_llm_info is None
+
+        data = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5-20250514",
+            "duration_ms": 2345,
+        }
+
+        result = await hooks.handle_llm_response("llm:response", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+        assert hooks.last_llm_info is not None
+        assert hooks.last_llm_info["provider"] == "anthropic"
+        assert hooks.last_llm_info["model"] == "claude-sonnet-4-5-20250514"
+        assert hooks.last_llm_info["duration_ms"] == 2345
+
+    @pytest.mark.asyncio
+    async def test_token_usage_displays_model_info(self, capsys):
+        """Test token usage header includes provider/model/duration when available."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Simulate llm:response having been received
+        hooks.last_llm_info = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5-20250514",
+            "duration_ms": 2345,
+        }
+
+        # Last block with token usage
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": "Hello"},
+            "usage": {"input_tokens": 1000, "output_tokens": 500},
+        }
+
+        result = await hooks.handle_content_block_end("content_block:end", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+        captured = capsys.readouterr()
+        assert (
+            "📊 Token Usage (anthropic/claude-sonnet-4-5-20250514) [2.3s]"
+            in captured.out
+        )
+        assert "Input: 1,000" in captured.out
+        assert "Output: 500" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_token_usage_fallback_without_model_info(self, capsys):
+        """Test token usage renders gracefully when last_llm_info is None."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Explicitly ensure no llm info
+        assert hooks.last_llm_info is None
+
+        # Last block with token usage
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": "Hello"},
+            "usage": {"input_tokens": 1000, "output_tokens": 500},
+        }
+
+        result = await hooks.handle_content_block_end("content_block:end", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+        captured = capsys.readouterr()
+        # Should show basic header without model info
+        assert "📊 Token Usage" in captured.out
+        # Should NOT have parentheses with provider/model
+        assert "📊 Token Usage (" not in captured.out
+        assert "Input: 1,000" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_last_llm_info_cleared_after_render(self, capsys):
+        """Test that last_llm_info is cleared after token usage is rendered."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Simulate llm:response having been received
+        hooks.last_llm_info = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5-20250514",
+            "duration_ms": 2345,
+        }
+
+        # Last block with token usage
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": "Hello"},
+            "usage": {"input_tokens": 1000, "output_tokens": 500},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        # State should be cleared after rendering
+        assert hooks.last_llm_info is None
+
 
 @pytest.mark.asyncio
 async def test_non_thinking_blocks_ignored():
     """Test that non-thinking blocks are ignored."""
-    hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+    hooks = StreamingUIHooks(
+        show_thinking=True, show_tool_lines=5, show_token_usage=True
+    )
 
     # Test text block (should be ignored)
     data = {"block_type": "text", "block_index": 0}
@@ -313,7 +570,9 @@ async def test_non_thinking_blocks_ignored():
 @pytest.mark.asyncio
 async def test_tool_with_string_result(capsys):
     """Test tool result when result is a plain string."""
-    hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+    hooks = StreamingUIHooks(
+        show_thinking=True, show_tool_lines=5, show_token_usage=True
+    )
 
     data = {"tool_name": "some_tool", "tool_response": "Simple string result"}
 
@@ -325,3 +584,126 @@ async def test_tool_with_string_result(capsys):
     captured = capsys.readouterr()
     assert "✅ Tool result: some_tool" in captured.out
     assert "Simple string result" in captured.out
+
+
+class TestTokenUsageHeaderWithModelInfo:
+    """Test token usage header displays model info when available."""
+
+    @pytest.mark.asyncio
+    async def test_token_usage_header_includes_model_info(self, capsys):
+        """Test token usage header shows provider/model and duration when last_llm_info is set."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Simulate llm:response event setting last_llm_info
+        hooks.last_llm_info = {
+            "provider": "anthropic",
+            "model": "claude-3-sonnet",
+            "duration_ms": 1500,
+        }
+
+        # Last block with usage data
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": ""},
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        captured = capsys.readouterr()
+        # Should include provider/model and duration in header
+        assert "📊 Token Usage (anthropic/claude-3-sonnet) [1.5s]" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_token_usage_header_without_duration(self, capsys):
+        """Test token usage header shows provider/model without duration when duration_ms is None."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # No duration_ms
+        hooks.last_llm_info = {
+            "provider": "openai",
+            "model": "gpt-4",
+            "duration_ms": None,
+        }
+
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": ""},
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        captured = capsys.readouterr()
+        # Should include provider/model but no duration
+        assert "📊 Token Usage (openai/gpt-4)" in captured.out
+        # Should NOT have duration like [1.5s] - check for pattern [digits.digits s]
+        header_line = captured.out.split("Token Usage")[1].split("\n")[0]
+        assert not re.search(r"\[\d+\.\d+s\]", header_line)  # No duration bracket
+
+    @pytest.mark.asyncio
+    async def test_token_usage_header_without_llm_info(self, capsys):
+        """Test token usage header shows basic format when last_llm_info is None."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # No llm info captured
+        hooks.last_llm_info = None
+
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": ""},
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        captured = capsys.readouterr()
+        # Should show basic header without model info
+        assert "📊 Token Usage" in captured.out
+        # Should NOT have parentheses (no model info)
+        header_line = [
+            line for line in captured.out.split("\n") if "Token Usage" in line
+        ][0]
+        assert "(" not in header_line
+
+    @pytest.mark.asyncio
+    async def test_last_llm_info_cleared_after_token_usage_rendered(self, capsys):
+        """Test that last_llm_info is cleared to None after token usage is displayed.
+
+        This prevents stale model info from bleeding into subsequent requests.
+        """
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Simulate llm:response event setting last_llm_info
+        hooks.last_llm_info = {
+            "provider": "anthropic",
+            "model": "claude-3-sonnet",
+            "duration_ms": 1500,
+        }
+
+        # Last block with usage data triggers token usage display
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": ""},
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        # After rendering token usage, last_llm_info should be cleared
+        assert hooks.last_llm_info is None, (
+            "last_llm_info should be cleared after token usage is rendered "
+            "to avoid stale data in subsequent requests"
+        )

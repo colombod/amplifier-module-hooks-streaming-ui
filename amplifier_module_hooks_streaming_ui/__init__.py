@@ -38,6 +38,7 @@ async def mount(coordinator: Any, config: dict[str, Any]) -> None:
     coordinator.hooks.register("content_block:end", hooks.handle_content_block_end)
     coordinator.hooks.register("tool:pre", hooks.handle_tool_pre)
     coordinator.hooks.register("tool:post", hooks.handle_tool_post)
+    coordinator.hooks.register("llm:response", hooks.handle_llm_response)
 
     # Log successful mount
     logger.info("Mounted hooks-streaming-ui")
@@ -62,6 +63,26 @@ class StreamingUIHooks:
         self.show_tool_lines = show_tool_lines
         self.show_token_usage = show_token_usage
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
+        self.last_llm_info: dict | None = None
+
+    async def handle_llm_response(
+        self, _event: str, data: dict[str, Any]
+    ) -> HookResult:
+        """Capture model/provider info for display with token usage.
+
+        Args:
+            _event: Event name (llm:response) - unused
+            data: Event data containing provider, model, duration_ms
+
+        Returns:
+            HookResult with action="continue"
+        """
+        self.last_llm_info = {
+            "provider": data.get("provider"),
+            "model": data.get("model"),
+            "duration_ms": data.get("duration_ms"),
+        }
+        return HookResult(action="continue")
 
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
@@ -291,10 +312,25 @@ class StreamingUIHooks:
                     # First request - cache being created
                     cache_info = " (caching...)"
 
-            print(f"{indent}\033[2m│  📊 Token Usage\033[0m")
+            # Build the header with model info if available
+            if self.last_llm_info:
+                provider = self.last_llm_info.get("provider") or ""
+                model = self.last_llm_info.get("model") or ""
+                duration_ms = self.last_llm_info.get("duration_ms")
+
+                # Format duration as seconds with 1 decimal
+                duration_str = f" [{duration_ms / 1000:.1f}s]" if duration_ms else ""
+
+                header = f"📊 Token Usage ({provider}/{model}){duration_str}"
+            else:
+                header = "📊 Token Usage"
+
+            print(f"{indent}\033[2m│  {header}\033[0m")
             print(
                 f"{indent}\033[2m└─ Input: {input_str}{cache_info} | Output: {output_str} | Total: {total_str}\033[0m"
             )
+            # Clear for next request to avoid stale data
+            self.last_llm_info = None
 
         return HookResult(action="continue")
 
