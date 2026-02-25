@@ -1,5 +1,6 @@
 """Tests for streaming UI hooks module."""
 
+import re
 from unittest.mock import MagicMock
 
 import pytest
@@ -526,8 +527,6 @@ class TestTokenUsageHeaderWithModelInfo:
         # Should include provider/model but no duration
         assert "📊 Token Usage (openai/gpt-4)" in captured.out
         # Should NOT have duration like [1.5s] - check for pattern [digits.digits s]
-        import re
-
         header_line = captured.out.split("Token Usage")[1].split("\n")[0]
         assert not re.search(r"\[\d+\.\d+s\]", header_line)  # No duration bracket
 
