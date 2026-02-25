@@ -8,6 +8,20 @@ from amplifier_module_hooks_streaming_ui import StreamingUIHooks
 from amplifier_module_hooks_streaming_ui import mount
 
 
+class TestStreamingUIHooksInit:
+    """Test StreamingUIHooks initialization."""
+
+    def test_last_llm_info_initialized_to_none(self):
+        """Test that last_llm_info is initialized to None in __init__."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+        assert hasattr(hooks, "last_llm_info"), "last_llm_info attribute should exist"
+        assert hooks.last_llm_info is None, (
+            "last_llm_info should be initialized to None"
+        )
+
+
 @pytest.mark.asyncio
 async def test_mount_registers_hooks():
     """Test that mount registers all required hooks."""
@@ -15,16 +29,29 @@ async def test_mount_registers_hooks():
     coordinator.hooks = MagicMock()
     coordinator.hooks.register = MagicMock()
 
-    config = {"ui": {"show_thinking_stream": True, "show_tool_lines": 5, "show_token_usage": True}}
+    config = {
+        "ui": {
+            "show_thinking_stream": True,
+            "show_tool_lines": 5,
+            "show_token_usage": True,
+        }
+    }
 
     await mount(coordinator, config)
 
     # Verify all hooks are registered
-    expected_events = ["content_block:start", "content_block:end", "tool:pre", "tool:post"]
+    expected_events = [
+        "content_block:start",
+        "content_block:end",
+        "tool:pre",
+        "tool:post",
+    ]
 
     for event in expected_events:
         # Find if this event was registered
-        registered = any(call[0][0] == event for call in coordinator.hooks.register.call_args_list)
+        registered = any(
+            call[0][0] == event for call in coordinator.hooks.register.call_args_list
+        )
         assert registered, f"Event {event} was not registered"
 
 
@@ -50,7 +77,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_thinking_block_start(self, capsys):
         """Test thinking block start detection."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         data = {"block_type": "thinking", "block_index": 0}
 
@@ -66,7 +95,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_thinking_block_disabled(self, capsys):
         """Test thinking blocks are not shown when disabled."""
-        hooks = StreamingUIHooks(show_thinking=False, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=False, show_tool_lines=5, show_token_usage=True
+        )
 
         data = {"block_type": "thinking", "block_index": 0}
 
@@ -82,12 +113,20 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_thinking_block_end(self, capsys):
         """Test thinking block display on end."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         # Track the block first
         hooks.thinking_blocks[0] = {"started": True}
 
-        data = {"block_index": 0, "block": {"type": "thinking", "thinking": "This is a test thought process."}}
+        data = {
+            "block_index": 0,
+            "block": {
+                "type": "thinking",
+                "thinking": "This is a test thought process.",
+            },
+        }
 
         result = await hooks.handle_content_block_end("content_block:end", data)
 
@@ -103,7 +142,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_reasoning_block_end(self, capsys):
         """Reasoning blocks should be treated like thinking blocks."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         hooks.thinking_blocks[1] = {"started": True}
         data = {
@@ -129,7 +170,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_tool_pre(self, capsys):
         """Test tool invocation display."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=3, show_token_usage=True
+        )
 
         data = {
             "tool_name": "filesystem_read",
@@ -148,9 +191,14 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_tool_post_success(self, capsys):
         """Test successful tool result display."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=3, show_token_usage=True
+        )
 
-        data = {"tool_name": "filesystem_read", "tool_response": {"success": True, "output": "File contents here"}}
+        data = {
+            "tool_name": "filesystem_read",
+            "tool_response": {"success": True, "output": "File contents here"},
+        }
 
         result = await hooks.handle_tool_post("tool:post", data)
 
@@ -164,9 +212,14 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_tool_post_failure(self, capsys):
         """Test failed tool result display."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=3, show_token_usage=True
+        )
 
-        data = {"tool_name": "filesystem_read", "tool_response": {"success": False, "output": "Error: File not found"}}
+        data = {
+            "tool_name": "filesystem_read",
+            "tool_response": {"success": False, "output": "Error: File not found"},
+        }
 
         result = await hooks.handle_tool_post("tool:post", data)
 
@@ -180,7 +233,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_token_usage_display_with_thinking(self, capsys):
         """Test token usage displayed after last block when included in event data."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         # Track the thinking block first
         hooks.thinking_blocks[0] = {"started": True}
@@ -208,7 +263,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_token_usage_not_displayed_for_non_last_block(self, capsys):
         """Test token usage NOT displayed for blocks that aren't last."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         hooks.thinking_blocks[0] = {"started": True}
 
@@ -231,7 +288,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_token_usage_disabled(self, capsys):
         """Test token usage is not shown when disabled."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=False)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=False
+        )
 
         hooks.thinking_blocks[0] = {"started": True}
 
@@ -253,7 +312,9 @@ class TestStreamingUIHooks:
     @pytest.mark.asyncio
     async def test_token_usage_missing_from_event(self, capsys):
         """Test token usage handles missing usage data gracefully."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
 
         hooks.thinking_blocks[0] = {"started": True}
 
@@ -274,7 +335,9 @@ class TestStreamingUIHooks:
 
     def test_truncate_lines(self):
         """Test line truncation logic."""
-        hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=3, show_token_usage=True)
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=3, show_token_usage=True
+        )
 
         # Test short text (no truncation)
         text = "line1\nline2\nline3"
@@ -299,7 +362,9 @@ class TestStreamingUIHooks:
 @pytest.mark.asyncio
 async def test_non_thinking_blocks_ignored():
     """Test that non-thinking blocks are ignored."""
-    hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+    hooks = StreamingUIHooks(
+        show_thinking=True, show_tool_lines=5, show_token_usage=True
+    )
 
     # Test text block (should be ignored)
     data = {"block_type": "text", "block_index": 0}
@@ -313,7 +378,9 @@ async def test_non_thinking_blocks_ignored():
 @pytest.mark.asyncio
 async def test_tool_with_string_result(capsys):
     """Test tool result when result is a plain string."""
-    hooks = StreamingUIHooks(show_thinking=True, show_tool_lines=5, show_token_usage=True)
+    hooks = StreamingUIHooks(
+        show_thinking=True, show_tool_lines=5, show_token_usage=True
+    )
 
     data = {"tool_name": "some_tool", "tool_response": "Simple string result"}
 

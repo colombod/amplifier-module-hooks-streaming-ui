@@ -62,6 +62,7 @@ class StreamingUIHooks:
         self.show_tool_lines = show_tool_lines
         self.show_token_usage = show_token_usage
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
+        self.last_llm_info: dict | None = None
 
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
