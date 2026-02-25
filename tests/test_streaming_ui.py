@@ -493,6 +493,36 @@ class TestStreamingUIHooks:
         assert "Input: 1,000" in captured.out
         assert "Output: 500" in captured.out
 
+    @pytest.mark.asyncio
+    async def test_token_usage_fallback_without_model_info(self, capsys):
+        """Test token usage renders gracefully when last_llm_info is None."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Explicitly ensure no llm info
+        assert hooks.last_llm_info is None
+
+        # Last block with token usage
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": "Hello"},
+            "usage": {"input_tokens": 1000, "output_tokens": 500},
+        }
+
+        result = await hooks.handle_content_block_end("content_block:end", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+        captured = capsys.readouterr()
+        # Should show basic header without model info
+        assert "📊 Token Usage" in captured.out
+        # Should NOT have parentheses with provider/model
+        assert "📊 Token Usage (" not in captured.out
+        assert "Input: 1,000" in captured.out
+
 
 @pytest.mark.asyncio
 async def test_non_thinking_blocks_ignored():
