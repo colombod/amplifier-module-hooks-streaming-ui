@@ -557,3 +557,36 @@ class TestTokenUsageHeaderWithModelInfo:
             line for line in captured.out.split("\n") if "Token Usage" in line
         ][0]
         assert "(" not in header_line
+
+    @pytest.mark.asyncio
+    async def test_last_llm_info_cleared_after_token_usage_rendered(self, capsys):
+        """Test that last_llm_info is cleared to None after token usage is displayed.
+
+        This prevents stale model info from bleeding into subsequent requests.
+        """
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Simulate llm:response event setting last_llm_info
+        hooks.last_llm_info = {
+            "provider": "anthropic",
+            "model": "claude-3-sonnet",
+            "duration_ms": 1500,
+        }
+
+        # Last block with usage data triggers token usage display
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": ""},
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        # After rendering token usage, last_llm_info should be cleared
+        assert hooks.last_llm_info is None, (
+            "last_llm_info should be cleared after token usage is rendered "
+            "to avoid stale data in subsequent requests"
+        )

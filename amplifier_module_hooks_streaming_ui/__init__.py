@@ -329,6 +329,8 @@ class StreamingUIHooks:
             print(
                 f"{indent}\033[2m└─ Input: {input_str}{cache_info} | Output: {output_str} | Total: {total_str}\033[0m"
             )
+            # Clear for next request to avoid stale data
+            self.last_llm_info = None
 
         return HookResult(action="continue")
 
