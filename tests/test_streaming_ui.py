@@ -458,6 +458,41 @@ class TestStreamingUIHooks:
         assert hooks.last_llm_info["model"] == "claude-sonnet-4-5-20250514"
         assert hooks.last_llm_info["duration_ms"] == 2345
 
+    @pytest.mark.asyncio
+    async def test_token_usage_displays_model_info(self, capsys):
+        """Test token usage header includes provider/model/duration when available."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Simulate llm:response having been received
+        hooks.last_llm_info = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5-20250514",
+            "duration_ms": 2345,
+        }
+
+        # Last block with token usage
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": "Hello"},
+            "usage": {"input_tokens": 1000, "output_tokens": 500},
+        }
+
+        result = await hooks.handle_content_block_end("content_block:end", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+        captured = capsys.readouterr()
+        assert (
+            "📊 Token Usage (anthropic/claude-sonnet-4-5-20250514) [2.3s]"
+            in captured.out
+        )
+        assert "Input: 1,000" in captured.out
+        assert "Output: 500" in captured.out
+
 
 @pytest.mark.asyncio
 async def test_non_thinking_blocks_ignored():
