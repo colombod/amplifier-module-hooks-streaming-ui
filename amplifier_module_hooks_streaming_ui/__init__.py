@@ -314,8 +314,8 @@ class StreamingUIHooks:
 
             # Build the header with model info if available
             if self.last_llm_info:
-                provider = self.last_llm_info.get("provider", "")
-                model = self.last_llm_info.get("model", "")
+                provider = self.last_llm_info.get("provider") or ""
+                model = self.last_llm_info.get("model") or ""
                 duration_ms = self.last_llm_info.get("duration_ms")
 
                 # Format duration as seconds with 1 decimal
