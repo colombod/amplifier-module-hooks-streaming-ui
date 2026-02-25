@@ -523,6 +523,33 @@ class TestStreamingUIHooks:
         assert "📊 Token Usage (" not in captured.out
         assert "Input: 1,000" in captured.out
 
+    @pytest.mark.asyncio
+    async def test_last_llm_info_cleared_after_render(self, capsys):
+        """Test that last_llm_info is cleared after token usage is rendered."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Simulate llm:response having been received
+        hooks.last_llm_info = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5-20250514",
+            "duration_ms": 2345,
+        }
+
+        # Last block with token usage
+        data = {
+            "block_index": 0,
+            "total_blocks": 1,
+            "block": {"type": "text", "text": "Hello"},
+            "usage": {"input_tokens": 1000, "output_tokens": 500},
+        }
+
+        await hooks.handle_content_block_end("content_block:end", data)
+
+        # State should be cleared after rendering
+        assert hooks.last_llm_info is None
+
 
 @pytest.mark.asyncio
 async def test_non_thinking_blocks_ignored():
