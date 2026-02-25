@@ -22,6 +22,79 @@ class TestStreamingUIHooksInit:
         )
 
 
+class TestHandleLLMResponse:
+    """Test handle_llm_response handler method."""
+
+    @pytest.mark.asyncio
+    async def test_handle_llm_response_exists(self):
+        """Test that handle_llm_response method exists on StreamingUIHooks."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+        assert hasattr(hooks, "handle_llm_response"), (
+            "handle_llm_response method should exist"
+        )
+
+    @pytest.mark.asyncio
+    async def test_handle_llm_response_captures_llm_info(self):
+        """Test that handle_llm_response captures provider, model, and duration_ms."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        data = {
+            "provider": "anthropic",
+            "model": "claude-3-sonnet",
+            "duration_ms": 1234,
+        }
+
+        await hooks.handle_llm_response("llm:response", data)
+
+        # Verify last_llm_info is populated correctly
+        assert hooks.last_llm_info is not None, "last_llm_info should be set"
+        assert hooks.last_llm_info["provider"] == "anthropic"
+        assert hooks.last_llm_info["model"] == "claude-3-sonnet"
+        assert hooks.last_llm_info["duration_ms"] == 1234
+
+    @pytest.mark.asyncio
+    async def test_handle_llm_response_returns_hook_result_continue(self):
+        """Test that handle_llm_response returns HookResult with action='continue'."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        data = {
+            "provider": "openai",
+            "model": "gpt-4",
+            "duration_ms": 500,
+        }
+
+        result = await hooks.handle_llm_response("llm:response", data)
+
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+    @pytest.mark.asyncio
+    async def test_handle_llm_response_handles_missing_fields(self):
+        """Test that handle_llm_response handles missing fields gracefully."""
+        hooks = StreamingUIHooks(
+            show_thinking=True, show_tool_lines=5, show_token_usage=True
+        )
+
+        # Empty data dict
+        data = {}
+
+        result = await hooks.handle_llm_response("llm:response", data)
+
+        # Should still work with None values
+        assert hooks.last_llm_info is not None
+        assert hooks.last_llm_info["provider"] is None
+        assert hooks.last_llm_info["model"] is None
+        assert hooks.last_llm_info["duration_ms"] is None
+        assert isinstance(result, HookResult)
+        assert result.action == "continue"
+
+
 @pytest.mark.asyncio
 async def test_mount_registers_hooks():
     """Test that mount registers all required hooks."""

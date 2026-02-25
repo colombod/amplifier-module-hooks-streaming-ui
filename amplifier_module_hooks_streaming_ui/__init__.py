@@ -64,6 +64,25 @@ class StreamingUIHooks:
         self.thinking_blocks: dict[int, dict[str, Any]] = {}
         self.last_llm_info: dict | None = None
 
+    async def handle_llm_response(
+        self, _event: str, data: dict[str, Any]
+    ) -> HookResult:
+        """Capture model/provider info for display with token usage.
+
+        Args:
+            _event: Event name (llm:response) - unused
+            data: Event data containing provider, model, duration_ms
+
+        Returns:
+            HookResult with action="continue"
+        """
+        self.last_llm_info = {
+            "provider": data.get("provider"),
+            "model": data.get("model"),
+            "duration_ms": data.get("duration_ms"),
+        }
+        return HookResult(action="continue")
+
     def _parse_agent_from_session_id(self, session_id: str | None) -> str | None:
         """Extract agent name from hierarchical session ID.
 
